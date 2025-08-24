@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+*.env
+*.sqlite3
+*.db
+.DS_Store
+
+# VSCode
+.vscode/
+
+# Node
+node_modules/
+dist/
+
+# Logs
+*.log
+logs/
+
+# Output/Cache
+cache/
+output_json/
+precomputed_maps/
+
+# OS/Editor
+Thumbs.db
+.idea/
+*.swp
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Frontend build
+frontend/dist/
+
+# Others
+*.bak
+*.tmp
+
+# 知识图谱结果图片（根目录下）
+/知识图谱*.png
