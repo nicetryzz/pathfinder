@@ -250,6 +250,15 @@ INSPECTOR_SYSTEM_PROMPT = """你是一位知识图谱的全局审查与深化专
 - **保持平衡**: 不是所有 `component` 都需要深化。一个好的知识树应该有详有略，错落有致。优先深化那些对初学者理解主题最为关键的核心组件。
 - **其他审查**: 继续关注知识鸿沟（缺失的`prerequisite`或`component`）和内容冗余（可合并的`component`）。
 
+# 结构修改的红线安全原则 (MANDATORY Safeguard Principles)
+
+- **禁止孤立子节点 (ABSOLUTELY FORBIDDEN to Orphan Children):** 在建议删除任何节点之前，你**必须**首先检查该节点是否有子节点（即，是否有任何从它出发的边）。
+  - 如果该节点**有子节点**，而你认为子节点应该被保留，你**绝对禁止**使用 `DELETE_NODE`，**必须**改用 `REFACTOR_AND_PROMOTE` 指令来安全地提升它们。
+  - 只有当一个节点是**叶子节点**（没有出边），或者你确认该节点及其**所有后代**都应被一并删除时，才允许使用 `DELETE_NODE`。
+
+- **禁止在单轮报告中操作同一节点 (FORBIDDEN to Operate on the Same Node Twice in One Report):**
+  - 在你的一份审查报告（`structural_suggestions`列表）中，如果一个节点已经被建议`DELETE`, `MERGE`, 或`REFACTOR`，那么后续的建议中**绝对禁止**再次对该节点进行任何操作。你的建议列表必须是逻辑上可以并行执行的，或者在顺序执行时不会产生冲突。
+
 你的输出是一份结构化的审查报告，包含具体的、可执行的修改建议。
 """
 
@@ -282,6 +291,14 @@ INSPECTOR_HUMAN_PROMPT = """
 
 3.  **`DELETE_NODE`**: **(用于精简图谱)**
     -   **何时使用**: 用于移除与主题弱相关、内容重叠、或对初学者过于细枝末节的任何类型的节点。
+
+4. **`REFACTOR_AND_PROMOTE`**: **(用于节点提升与结构重构)**
+    -   **何时使用**: 当你认为一个父节点（如`component`）可以被移除，且它的子节点（`sub_components`）应该被“提升”并直接连接到祖父节点（如`core`）时使用。
+    -   **作用**: 这个指令会原子性地完成“删除父节点”和“将其所有子节点重新连接到新的父节点”两个操作。
+
+5. 5.  **`MERGE_NODES`**: **(用于合并冗余节点 )**
+    -   **何时使用**: 当你发现两个或多个现有节点在概念上高度重叠，或者过于细碎，可以合并成一个更全面的单一节点时使用。
+    -   **作用**: 这个指令会创建一个全新的节点，将所有待合并节点的连接关系（边）都转移到这个新节点上，然后删除所有旧的、被合并的节点。
 
 请以以下JSON结构格式化你的审查报告：
 ```json
@@ -331,6 +348,30 @@ INSPECTOR_HUMAN_PROMPT = """
         "node_id": "建议删除的节点ID",
         "reason": "详细说明为什么
         }}
+    }},
+    {{
+      "suggestion_type": "REFACTOR_AND_PROMOTE",
+      "details": {{
+        "node_to_delete": "agent-architecture-cognitive-loop", // 需要删除的父节点
+        "new_parent_node": "ai-agent-system-design", // 子节点们的新归属
+        "reason": "节点'Agent架构与认知循环'的概念已被其子节点（感知、决策、行动）完全覆盖，故将其删除。同时，将其子节点提升，直接作为'AI Agent系统设计'的核心组件，使图谱结构更扁平、更直接。"
+      }}
+    }},
+    {{
+      "suggestion_type": "MERGE_NODES",
+      "details": {{
+        "nodes_to_merge": [
+            "node-id-to-merge-1",
+            "node-id-to-merge-2"
+        ],
+        "new_node": {{
+            "node_id": "new-merged-node-id",
+            "title": "合并后的新节点标题",
+            "type": "component", // 或 prerequisite, sub_component
+            "description": "对合并后新节点的综合描述。"
+        }},
+        "reason": "节点1和节点2的内容高度重叠，都讨论了XX的核心原理。将它们合并为一个更全面的'XX原理'节点，可以减少冗余，使学习路径更聚焦。"
+      }}
     }}
   ]
 }}

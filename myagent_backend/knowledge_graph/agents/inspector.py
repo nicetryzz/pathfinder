@@ -148,6 +148,118 @@ def apply_suggestions(state: PipelineState, report: Dict[str, Any]) -> Dict[str,
                 })
                 logger.info(f"Deleted node and its edges: {node.get('title', node_id)} (ID: {node_id})")
 
+        elif suggestion['suggestion_type'] == 'MERGE_NODES':
+            details = suggestion['details']
+            nodes_to_merge_ids = details.get("nodes_to_merge", [])
+            new_node_data = details.get("new_node")
+
+            if not nodes_to_merge_ids or not new_node_data:
+                results["errors"].append("MERGE_NODES suggestion is missing nodes_to_merge or new_node details.")
+                continue
+            
+            # 1. 创建合并后的新节点
+            new_node_id = new_node_data['node_id']
+            state.add_node(
+                node_id=new_node_id,
+                title=new_node_data['title'],
+                type=new_node_data['type'],
+                description=new_node_data['description'],
+                status="created"
+            )
+            results["added_nodes"].append(new_node_data)
+            logger.info(f"MERGE: Created new node '{new_node_data['title']}' (ID: {new_node_id})")
+
+            # 2. 重新连接边
+            # 使用集合来存储新的边关系，避免重复添加
+            new_edges_to_create = set()
+            
+            for old_node_id in nodes_to_merge_ids:
+                # 查找所有与旧节点相关的边
+                for edge in state.graph.get_edges():
+                    # 如果是入边 (Incoming edge)
+                    if edge['target'] == old_node_id:
+                        # 将入边的目标重定向到新节点
+                        new_edges_to_create.add((edge['source'], new_node_id, edge.get('relationship', 'related_to')))
+                    
+                    # 如果是出边 (Outgoing edge)
+                    elif edge['source'] == old_node_id:
+                        # 将出边的源头重定向到新节点
+                        new_edges_to_create.add((new_node_id, edge['target'], edge.get('relationship', 'related_to')))
+            
+            # 批量创建新的、去重后的边
+            for source_id, target_id, relationship in new_edges_to_create:
+                # 确保自己不指向自己
+                if source_id == target_id:
+                    continue
+                source_node = state.graph.get_node(source_id)
+                target_node = state.graph.get_node(target_id)
+                if source_node and target_node:
+                    state.add_edge(source_id, target_id, relationship=relationship)
+                    results["added_edges"].append({
+                        "source_id": source_id, "source_title": source_node.get("title", source_id),
+                        "target_id": target_id, "target_title": target_node.get("title", target_id),
+                        "relationship": relationship
+                    })
+                    logger.info(f"MERGE: Re-wired edge: {source_node.get('title')} → {relationship} → {target_node.get('title')}")
+
+            # 3. 删除所有旧的、被合并的节点
+            for old_node_id in nodes_to_merge_ids:
+                node = state.graph.get_node(old_node_id)
+                if node:
+                    state.graph.delete_node(old_node_id)
+                    results["removed_nodes"].append({
+                        "id": old_node_id,
+                        "title": node.get("title", old_node_id),
+                        "reason": "Merged into new node " + new_node_id
+                    })
+                    logger.info(f"MERGE: Deleted old node '{node.get('title')}' (ID: {old_node_id})")
+        elif suggestion['suggestion_type'] == 'REFACTOR_AND_PROMOTE':
+            details = suggestion['details']
+            node_to_delete_id = details.get("node_to_delete")
+            new_parent_id = details.get("new_parent_node")
+
+            if not node_to_delete_id or not new_parent_id:
+                results["errors"].append("REFACTOR_AND_PROMOTE suggestion is missing node_to_delete or new_parent_node details.")
+                continue
+
+            node_to_delete = state.graph.get_node(node_to_delete_id)
+            new_parent_node = state.graph.get_node(new_parent_id)
+
+            if not node_to_delete or not new_parent_node:
+                results["errors"].append(f"REFACTOR: One or both nodes do not exist: {node_to_delete_id}, {new_parent_id}")
+                continue
+            
+            # 1. 查找并收集所有需要重新连接的子节点
+            children_to_reconnect_ids = []
+            for edge in state.graph.get_edges():
+                if edge['source'] == node_to_delete_id:
+                    children_to_reconnect_ids.append(edge['target'])
+            
+            logger.info(f"REFACTOR: Identified {len(children_to_reconnect_ids)} children of '{node_to_delete.get('title')}' to promote.")
+
+            # 2. 为每个子节点创建到新父节点的新连接
+            for child_id in children_to_reconnect_ids:
+                child_node = state.graph.get_node(child_id)
+                if child_node:
+                    # 默认提升后的关系为 is_component_of，这在大多数情况下是合理的
+                    relationship = "is_component_of"
+                    state.add_edge(new_parent_id, child_id, relationship=relationship)
+                    results["added_edges"].append({
+                        "source_id": new_parent_id, "source_title": new_parent_node.get("title", new_parent_id),
+                        "target_id": child_id, "target_title": child_node.get("title", child_id),
+                        "relationship": relationship
+                    })
+                    logger.info(f"REFACTOR: Promoted '{child_node.get('title')}' by connecting it to new parent '{new_parent_node.get('title')}'")
+
+            # 3. 在所有子节点都安全地重新连接后，删除旧的父节点
+            state.graph.delete_node(node_to_delete_id)
+            results["removed_nodes"].append({
+                "id": node_to_delete_id,
+                "title": node_to_delete.get("title", node_to_delete_id),
+                "reason": f"Refactored and promoted children to {new_parent_id}"
+            })
+            logger.info(f"REFACTOR: Deleted old parent node '{node_to_delete.get('title')}' (ID: {node_to_delete_id})")
+
     return results
 
 def inspector_agent(state: PipelineState) -> Dict[str, Any]:

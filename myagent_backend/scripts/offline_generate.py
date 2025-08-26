@@ -15,10 +15,10 @@ def load_topics(input_path):
             return [line.strip() for line in f if line.strip()]
     # 默认主题列表
     return [
-        # "Transformer模型全解析",
-        # "RAG vs. Fine-tuning：技术选型与实现",
-        "AI Agent的系统设计",
-        "大型语言模型的分布式训练"
+        "Transformer模型全解析",
+        "RAG vs. Fine-tuning：技术选型与实现",
+        # "AI Agent的系统设计",
+        # "大型语言模型的分布式训练"
     ]
 
 def main():

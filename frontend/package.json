@@ -9,9 +9,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "echarts": "^5.6.0",
+    "element-plus": "^2.11.1",
     "marked": "^9.0.0",
     "vis-network": "^9.1.2",
     "vue": "^3.4.0",
+    "vue-echarts": "^7.0.3",
     "vue3-markdown-it": "^1.0.10"
   },
   "devDependencies": {
